@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queens – Lógica</title>
+<style>
+  :root{
+    --bg:#0b0c14; --fg:#E8ECF1; --muted:#A9B3C1;
+    --accent:#3b82f6; --bad:#ef4444; --ok:#22c55e; --warn:#eab308;
+    --tile:#121526; --card:#171b2e; --gap:6px; --cell:58px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,Segoe UI,Roboto,Arial}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#15192c,#0e1222)}
+  h1{font-size:18px;margin:0}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  select,button{background:#0f1323;border:1px solid rgba(255,255,255,.12);color:var(--fg);padding:8px 10px;border-radius:10px}
+  button.primary{background:var(--accent);border-color:transparent;color:#fff;cursor:pointer}
+  button.ghost{background:transparent;cursor:pointer}
+  main{max-width:1100px;margin:22px auto;padding:0 16px}
+  .wrap{display:grid;grid-template-columns:260px 1fr;gap:18px}
+  .panel{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px}
+  .stats{display:grid;gap:8px;font-size:14px;color:var(--muted)}
+  .bar{height:8px;background:#0d1122;border-radius:999px;overflow:hidden}
+  .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--ok),#7bd97b);width:0%}
+  .grid{display:grid;gap:var(--gap);background:var(--tile);padding:var(--gap);border-radius:14px;border:1px solid rgba(255,255,255,.08);justify-content:start}
+  .cell{width:var(--cell);height:var(--cell);border-radius:10px;display:grid;place-items:center;position:relative;
+        border:1px solid rgba(255,255,255,.10);cursor:pointer;user-select:none;transition:transform .06s}
+  .cell:hover{transform:translateY(-1px)}
+  .cell[disabled]{opacity:.4;pointer-events:none}
+  .mark{font-size:28px;line-height:1;filter:drop-shadow(0 0 2px rgba(0,0,0,.25))}
+  .conflict{box-shadow:inset 0 0 0 3px var(--bad)}
+  .okborder{box-shadow:inset 0 0 0 3px var(--ok)}
+  .hint{outline:2px dashed var(--warn);outline-offset:-4px}
+  .footer{margin-top:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;color:var(--muted)}
+  .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0e1326;border:1px solid rgba(255,255,255,.1)}
+  .toast{position:fixed;right:16px;bottom:16px;background:#10162a;border:1px solid rgba(255,255,255,.12);color:var(--fg);padding:10px 12px;border-radius:12px;opacity:0;transform:translateY(12px);transition:.25s}
+  .toast.show{opacity:1;transform:none}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#0e1220;border:1px solid rgba(255,255,255,.12);padding:2px 6px;border-radius:6px}
+  .sig{margin:18px auto 28px;max-width:1100px;padding:0 16px;color:var(--muted);font-size:13px;text-align:right}
+  /* marcação leve (1º clique) */
+  .pinned::after{
+    content:"•"; position:absolute; inset:auto auto 6px 6px; font-size:22px; line-height:1;
+    color:rgba(255,255,255,.75);
+    text-shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Queens – Lógica</h1>
+    <small style="color:var(--muted)">Regras: 1 ♛ por linha, 1 por coluna, 1 por <b>região</b> e sem rainhas adjacentes (8 vizinhos).</small>
+  </div>
+  <div class="controls">
+    <label>Nível:
+      <select id="difficulty">
+        <option value="easy">Fácil (5–6)</option>
+        <option value="medium" selected>Médio (6–7)</option>
+        <option value="hard">Difícil (7–8)</option>
+      </select>
+    </label>
+    <button id="new" class="primary">Nova fase</button>
+    <button id="reset" class="ghost">Reset</button>
+    <button id="hint">Dica</button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <section class="panel">
+      <div class="stats">
+        <div><b>Tamanho:</b> <span id="sizeInfo">—</span></div>
+        <div><b>Regiões (cores):</b> <span id="regionsInfo">—</span></div>
+        <div><b>Rainhas colocadas:</b> <span id="placedInfo">0</span></div>
+        <div><b>Conflitos:</b> <span id="conflictsInfo" style="color:var(--bad)">0</span></div>
+        <div class="bar"><span id="progress"></span></div>
+      </div>
+      <p style="color:var(--muted);margin-top:8px">
+        Vitória quando <b>todas</b> as regiões têm 1 ♛, e não há conflitos em linhas/colunas nem adjacência.
+      </p>
+    </section>
+
+    <section>
+      <div id="grid" class="grid" aria-label="tabuleiro"></div>
+      <div class="footer">
+        <div class="badge">Atalhos: <span class="kbd">Clique</span> vazio→marcado→♛→vazio • <span class="kbd">H</span> dica • <span class="kbd">N</span> nova fase</div>
+        <div id="status" class="badge">Pronto</div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<p class="sig">Criado por <b>Richard Alex</b> @ <b>richard.gms</b></p>
+
+<div id="toast" class="toast"></div>
+
+<script>
+(()=>{
+// ===== util =====
+const rng=(seed=Date.now())=>{let s=BigInt(seed)&((1n<<64n)-1n);return()=>Number((s=(s*6364136223846793005n+1442695040888963407n)&((1n<<64n)-1n))>>32n)/0x1_0000_0000}
+const choice=(a,r)=>a[Math.floor(r()*a.length)]
+const shuffle=(a,r)=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const PALETTES=[
+  ['#f94144','#f3722c','#f8961e','#f9c74f','#90be6d','#43aa8b','#577590','#277da1','#b56576','#6d597a'],
+  ['#e76f51','#2a9d8f','#e9c46a','#f4a261','#264653','#8ecae6','#219ebc','#023047','#ffb703','#fb8500'],
+  ['#ef476f','#ffd166','#06d6a0','#118ab2','#073b4c','#9b5de5','#f15bb5','#fee440','#00bbf9','#00f5d4'],
+  ['#ff6b6b','#ffd166','#06d6a0','#4cc9f0','#f72585','#bdb2ff','#f4a261','#2a9d8f','#e36414','#6a4c93']
+];
+const tint=(hex,amt)=>{const {r,g,b}=((h)=>{const x=h.replace('#','');const v=x.length===3?x.split('').map(c=>c+c).join(''):x;const n=parseInt(v,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}})(hex);const toHex=(r,g,b)=>'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');return toHex(Math.round(r+(255-r)*amt),Math.round(g+(255-g)*amt),Math.round(b+(255-b)*amt))}
+const shade=(hex,amt)=>{const {r,g,b}=((h)=>{const x=h.replace('#','');const v=x.length===3?x.split('').map(c=>c+c).join(''):x;const n=parseInt(v,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}})(hex);const f=1-amt;const toHex=(r,g,b)=>'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');return toHex(Math.round(r*f),Math.round(g*f),Math.round(b*f))}
+
+// ===== estado/UI =====
+let S={};
+const els={
+  grid:document.getElementById('grid'),
+  sizeInfo:document.getElementById('sizeInfo'),
+  regionsInfo:document.getElementById('regionsInfo'),
+  placedInfo:document.getElementById('placedInfo'),
+  conflictsInfo:document.getElementById('conflictsInfo'),
+  progress:document.getElementById('progress'),
+  status:document.getElementById('status'),
+  toast:document.getElementById('toast'),
+  selDiff:document.getElementById('difficulty'),
+  btnNew:document.getElementById('new'),
+  btnReset:document.getElementById('reset'),
+  btnHint:document.getElementById('hint'),
+};
+
+// ===== geração de tabuleiro (exatamente n regiões conectadas) =====
+function pickSize(diff,r){
+  if(diff==='easy') return 5 + Math.floor(r()*2);    // 5–6
+  if(diff==='medium') return 6 + Math.floor(r()*2);  // 6–7
+  return 7 + Math.floor(r()*2);                      // 7–8
+}
+// probabilidade de expansão por nível (controla o “formato” das regiões)
+function expandProb(diff){ return diff==='easy' ? 0.80 : diff==='medium' ? 0.75 : 0.68; }
+
+function genExactlyNRegions(n,r,diff){
+  const ids=Array.from({length:n},()=>Array(n).fill(-1));
+  const seeds=[]; const used=new Set();
+  while(seeds.length<n){ const i=Math.floor(r()*n), j=Math.floor(r()*n), k=i+','+j; if(used.has(k))continue; used.add(k); seeds.push([i,j]); }
+  const q=[]; seeds.forEach((pos,idx)=>{const [i,j]=pos;ids[i][j]=idx;q.push([i,j,idx])});
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  const p=expandProb(diff);
+  while(q.length){
+    const [i,j,id]=q.shift();
+    shuffle(dirs,r).forEach(([di,dj])=>{
+      const ni=i+di, nj=j+dj;
+      if(ni<0||nj<0||ni>=n||nj>=n) return;
+      if(ids[ni][nj]!==-1) return;
+      if(r()<p){ ids[ni][nj]=id; q.push([ni,nj,id]); }
+    });
+  }
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(ids[i][j]===-1){
+    const opts=[]; if(i>0&&ids[i-1][j]!==-1)opts.push(ids[i-1][j]); if(j>0&&ids[i][j-1]!==-1)opts.push(ids[i][j-1]);
+    if(i<n-1&&ids[i+1][j]!==-1)opts.push(ids[i+1][j]); if(j<n-1&&ids[i][j+1]!==-1)opts.push(ids[i][j+1]);
+    ids[i][j]=opts.length? choice(opts,r) : Math.floor(r()*n);
+  }
+  return ids;
+}
+
+function buildPuzzle(diff){
+  const r=rng(Date.now() ^ diff.length);
+  const n=pickSize(diff,r);
+  for(let tries=0; tries<160; tries++){
+    const regions=genExactlyNRegions(n,r,diff);
+    const perm=shuffle([...Array(n).keys()], r);
+    // regiões distintas
+    const seen=new Set(); let ok=true;
+    for(let i=0;i<n;i++){ const rid=regions[i][perm[i]]; if(seen.has(rid)){ok=false;break;} seen.add(rid); }
+    if(!ok) continue;
+    // sem adjacência
+    const dirs8=[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    let adjOK=true;
+    for(let i=0;i<n;i++){
+      const j=perm[i];
+      for(const [di,dj] of dirs8){
+        const ni=i+di, nj=j+dj;
+        if(ni<0||nj<0||ni>=n||nj>=n) continue;
+        if(perm[ni]===nj){ adjOK=false; break; }
+      }
+      if(!adjOK) break;
+    }
+    if(!adjOK) continue;
+
+    const palette=choice(PALETTES,r);
+    const colors=Array(n).fill('#888').map((_,k)=>palette[k%palette.length]);
+    return {n,regions,solution:perm,colors};
+  }
+  return buildPuzzle(diff); // raro fallback
+}
+
+// ===== jogo =====
+function newGame(){
+  const diff=els.selDiff.value;
+  const P=buildPuzzle(diff);
+  S={ n:P.n, regions:P.regions, colors:P.colors, solution:P.solution,
+      diff, state:Array.from({length:P.n},()=>Array(P.n).fill(0)) // 0 vazio, 1 marcado, 2 rainha
+    };
+  draw();
+  toast(`Fase ${S.n}×${S.n} — ${S.n} regiões (todas precisam de ♛)`);
+}
+function draw(){
+  const {n}=S;
+  els.grid.style.gridTemplateColumns=`repeat(${n}, var(--cell))`;
+  els.grid.innerHTML='';
+  els.sizeInfo.textContent=`${n} × ${n}`;
+  els.regionsInfo.textContent=n;
+
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    const id=S.regions[i][j];
+    const btn=document.createElement('button');
+    btn.className='cell'; btn.dataset.r=i; btn.dataset.c=j; btn.dataset.region=id;
+    const col=S.colors[id];
+    btn.style.background=tint(col,.18); btn.style.borderColor=shade(col,.35);
+    btn.addEventListener('click', onCellClick);
+    const mk=document.createElement('div'); mk.className='mark'; mk.textContent='';
+    btn.appendChild(mk); els.grid.appendChild(btn);
+  }
+  update();
+}
+function onCellClick(e){
+  const el=e.currentTarget;
+  const i=Number(el.dataset.r), j=Number(el.dataset.c);
+  // ciclo: 0 -> 1 (marcado) -> 2 (rainha) -> 0
+  S.state[i][j] = (S.state[i][j]+1)%3;
+  renderCell(i,j);
+  update();
+}
+function renderCell(i,j){
+  const k=i*S.n+j; const el=els.grid.children[k]; const mk=el.querySelector('.mark');
+  el.classList.remove('pinned'); mk.textContent='';
+  if(S.state[i][j]===1){ el.classList.add('pinned'); }
+  else if(S.state[i][j]===2){ mk.textContent='♛'; }
+}
+
+function cellAt(i,j){ return els.grid.children[i*S.n + j]; }
+function neighbors8(i,j){
+  return [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]
+    .map(([di,dj])=>[i+di,j+dj]).filter(([a,b])=>a>=0&&b>=0&&a<S.n&&b<S.n);
+}
+
+function update(){
+  const n=S.n;
+  [...els.grid.children].forEach(el=> el.classList.remove('conflict','okborder','hint'));
+
+  const row=Array(n).fill(0), col=Array(n).fill(0), reg=Array(n).fill(0);
+  const hasQ=Array.from({length:n},()=>Array(n).fill(false));
+  let queens=0;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++) if(S.state[i][j]===2){
+    queens++; row[i]++; col[j]++; reg[S.regions[i][j]]++; hasQ[i][j]=true;
+  }
+
+  // marca conflitos (só nas rainhas)
+  let conflicts=0;
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++) if(S.state[i][j]===2){
+    const rid=S.regions[i][j];
+    let bad=(row[i]>1)||(col[j]>1)||(reg[rid]>1);
+    if(!bad){
+      for(const [a,b] of neighbors8(i,j)){
+        if(hasQ[a][b]){ bad=true; break; }
+      }
+    }
+    const el=cellAt(i,j);
+    if(bad){ el.classList.add('conflict'); conflicts++; }
+    else { el.classList.add('okborder'); }
+  }
+
+  els.placedInfo.textContent=queens;
+  els.conflictsInfo.textContent=conflicts;
+  els.progress.style.width=Math.min(100,Math.round(100*queens/n))+'%';
+
+  // vitória: exatamente n ♛ e zero conflitos (implica 1 por região)
+  if(queens===n && conflicts===0 && reg.every(x=>x===1)){
+    els.status.textContent='✔️ Perfeito! 1/linha, 1/coluna, 1/região e sem adjacência.';
+    toast('Vitória! Fase completa.');
+    setTimeout(()=>{ [...els.grid.children].forEach(el=>el.setAttribute('disabled','')); }, 80);
+  } else {
+    els.status.textContent='Coloque 1 ♛ por linha/coluna/região e evite adjacências. Clique para marcar → ♛.';
+    [...els.grid.children].forEach(el=>el.removeAttribute('disabled'));
+  }
+}
+
+// ===== UX =====
+function resetBoard(){
+  for(let i=0;i<S.n;i++) for(let j=0;j<S.n;j++){ S.state[i][j]=0; renderCell(i,j); }
+  update(); toast('Tabuleiro limpo.');
+}
+function hint(){
+  // tenta sugerir uma casa da solução que não quebre regras (inclui adjacência)
+  const opts=[];
+  for(let i=0;i<S.n;i++){
+    const j=S.solution[i];
+    if(S.state[i][j]===2) continue;
+    let rowUsed=false,colUsed=false,regUsed=false,adjUsed=false;
+    for(let a=0;a<S.n;a++){ if(S.state[i][a]===2) rowUsed=true; if(S.state[a][j]===2) colUsed=true; }
+    const rid=S.regions[i][j];
+    for(let a=0;a<S.n;a++)for(let b=0;b<S.n;b++) if(S.state[a][b]===2 && S.regions[a][b]===rid) regUsed=true;
+    for(const [a,b] of neighbors8(i,j)) if(S.state[a][b]===2) adjUsed=true;
+    if(!(rowUsed||colUsed||regUsed||adjUsed)) opts.push([i,j]);
+  }
+  if(opts.length===0){ toast('Sem dica segura agora.'); return; }
+  const [ri,cj]=choice(opts, Math.random);
+  const el=cellAt(ri,cj); el.classList.add('hint'); setTimeout(()=>el.classList.remove('hint'),900);
+  S.state[ri][cj]=2; renderCell(ri,cj); update();
+}
+
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800) }
+
+// ===== eventos =====
+els.btnNew.addEventListener('click', ()=> newGame());
+els.btnReset.addEventListener('click', ()=> resetBoard());
+els.btnHint.addEventListener('click', ()=> hint());
+els.selDiff.addEventListener('change', ()=> newGame());   // nível funcionando
+
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='n'||e.key==='N') newGame();
+  if(e.key==='h'||e.key==='H') hint();
+  if(e.key==='r'||e.key==='R') resetBoard();
+});
+
+// init
+newGame();
+})();
+</script>
+</body>
+</html>
